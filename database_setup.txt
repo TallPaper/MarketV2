@@ -1,0 +1,173 @@
+CREATE TABLE IF NOT EXISTS personel (
+    id SERIAL PRIMARY KEY,
+    kullanici_no VARCHAR(20) UNIQUE NOT NULL,
+    ad VARCHAR(50) NOT NULL,
+    soyad VARCHAR(50) NOT NULL,
+    rol VARCHAR(20) NOT NULL,
+    sifre VARCHAR(50) NOT NULL,
+    mail VARCHAR(100)
+);
+
+CREATE TABLE IF NOT EXISTS urunler (
+    id SERIAL PRIMARY KEY,
+    barkod VARCHAR(50) UNIQUE NOT NULL,
+    urun_adi VARCHAR(100) NOT NULL,
+    kategori VARCHAR(50),
+    stok DECIMAL(10,2) DEFAULT 0,
+    birim VARCHAR(10),
+    alis_fiyati DECIMAL(10,2) DEFAULT 0,
+    fiyat DECIMAL(10,2) DEFAULT 0,
+    satis_sayisi INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS musteriler (
+    id SERIAL PRIMARY KEY,
+    telefon VARCHAR(20) UNIQUE NOT NULL,
+    ad_soyad VARCHAR(100) NOT NULL,
+    mail VARCHAR(100),
+    puan DECIMAL(10,2) DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS satislar (
+    id SERIAL PRIMARY KEY,
+    tarih TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    tutar DECIMAL(10,2),
+    odeme_turu VARCHAR(20),
+    kasiyer VARCHAR(100),
+    musteri_mail VARCHAR(100)
+);
+
+CREATE TABLE IF NOT EXISTS satis_detay (
+    id SERIAL PRIMARY KEY,
+    satis_id INTEGER REFERENCES satislar(id) ON DELETE CASCADE,
+    barkod VARCHAR(50),
+    urun_adi VARCHAR(100),
+    miktar DECIMAL(10,2),
+    fiyat DECIMAL(10,2),
+    toplam DECIMAL(10,2),
+    iade_edildi BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS kampanyalar (
+    id SERIAL PRIMARY KEY,
+    kampanya_adi VARCHAR(100),
+    urun_barkod VARCHAR(50),
+    indirim_yuzdesi INTEGER,
+    baslangic_tarihi DATE,
+    bitis_tarihi DATE,
+    kampanya_baslik VARCHAR(150)
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+    id SERIAL PRIMARY KEY,
+    kullanici VARCHAR(100),
+    islem TEXT,
+    tarih TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION fn_urun_kaydet(
+    p_barkod VARCHAR, p_ad VARCHAR, p_kat VARCHAR, 
+    p_stok NUMERIC, p_birim VARCHAR, p_alis NUMERIC, p_satis NUMERIC
+) RETURNS VOID AS $$
+BEGIN
+    INSERT INTO urunler (barkod, urun_adi, kategori, stok, birim, alis_fiyati, fiyat)
+    VALUES (p_barkod, p_ad, p_kat, p_stok, p_birim, p_alis, p_satis)
+    ON CONFLICT (barkod) DO UPDATE SET
+        urun_adi = EXCLUDED.urun_adi,
+        stok = urunler.stok + EXCLUDED.stok,
+        fiyat = EXCLUDED.fiyat;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_personel_giris(p_no VARCHAR, p_sifre VARCHAR)
+RETURNS TABLE(id INT, ad VARCHAR, soyad VARCHAR, rol VARCHAR, mail VARCHAR) AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT p.id, p.ad, p.soyad, p.rol, p.mail 
+    FROM personel p 
+    WHERE p.kullanici_no = p_no AND p.sifre = p_sifre;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_puan_guncelle(p_musteri_id INT, p_puan_farki NUMERIC)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE musteriler SET puan = puan + p_puan_farki WHERE id = p_musteri_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_trg_stok_dus()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE urunler 
+    SET stok = stok - NEW.miktar, 
+        satis_sayisi = satis_sayisi + NEW.miktar
+    WHERE barkod = NEW.barkod;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_satis_stok_guncelle
+AFTER INSERT ON satis_detay
+FOR EACH ROW EXECUTE FUNCTION fn_trg_stok_dus();
+
+CREATE OR REPLACE FUNCTION fn_trg_iade_stok_ekle()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.iade_edildi = TRUE AND OLD.iade_edildi = FALSE THEN
+        UPDATE urunler SET stok = stok + NEW.miktar WHERE barkod = NEW.barkod;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_iade_stok_guncelle
+AFTER UPDATE ON satis_detay
+FOR EACH ROW EXECUTE FUNCTION fn_trg_iade_stok_ekle();
+
+CREATE OR REPLACE FUNCTION fn_trg_log_kaydet()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO logs (kullanici, islem) 
+    VALUES ('SYSTEM_TRIGGER', TG_TABLE_NAME || ' tablosunda islem yapildi. ID: ' || NEW.id);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_log_personel AFTER INSERT ON personel FOR EACH ROW EXECUTE FUNCTION fn_trg_log_kaydet();
+CREATE TRIGGER trg_log_urun AFTER INSERT OR UPDATE ON urunler FOR EACH ROW EXECUTE FUNCTION fn_trg_log_kaydet();
+
+CREATE OR REPLACE FUNCTION fn_gunluk_ciro(p_tarih DATE)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_toplam NUMERIC;
+BEGIN
+    SELECT SUM(tutar) INTO v_toplam FROM satislar WHERE DATE(tarih) = p_tarih;
+    RETURN COALESCE(v_toplam, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_kritik_stok(p_limit NUMERIC)
+RETURNS TABLE(barkod VARCHAR, ad VARCHAR, kalan NUMERIC) AS $$
+BEGIN
+    RETURN QUERY SELECT u.barkod, u.urun_adi, u.stok FROM urunler u WHERE u.stok <= p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+INSERT INTO personel (kullanici_no, ad, soyad, rol, sifre, mail) VALUES 
+('101', 'Ahmet', 'Yilmaz', 'YONETIM', '1234', 'admin@yildizmarket.com'),
+('201', 'Ayse', 'Demir', 'KASA', '1234', 'ayse@yildizmarket.com');
+
+SELECT fn_urun_kaydet('8690504001', 'Ekmek', 'Gida', 100, 'Adet', 8, 10);
+SELECT fn_urun_kaydet('8690504002', 'Sut', 'Sut Urunleri', 50, 'Adet', 25, 35);
+SELECT fn_urun_kaydet('8690504003', 'Su 0.5L', 'Icecek', 500, 'Adet', 2, 5);
+SELECT fn_urun_kaydet('8690504004', 'Domates', 'Manav', 50, 'Kg', 15, 25);
+SELECT fn_urun_kaydet('8690504005', 'Elma', 'Manav', 40, 'Kg', 12, 20);
+SELECT fn_urun_kaydet('8690504006', 'Yumurta', 'Gida', 300, 'Adet', 2, 4);
+SELECT fn_urun_kaydet('8690504007', 'Gazete', 'Diger', 20, 'Adet', 5, 10);
+SELECT fn_urun_kaydet('8690504008', 'Poset', 'Diger', 1000, 'Adet', 0.10, 0.25);
+
+INSERT INTO musteriler (telefon, ad_soyad, mail, puan) VALUES 
+('5551112233', 'Test Musteri', 'test@mail.com', 50.00);
+
+INSERT INTO logs (kullanici, islem) VALUES ('SISTEM', 'Veritabani Fonksiyon ve Trigger kurulumu tamamlandi.');
