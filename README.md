@@ -1,6 +1,6 @@
-# 🛒 Yıldız Market - Ticari Otomasyon ve Kasa (POS) Sistemi
+# 🛒 Market - Ticari Otomasyon ve Kasa (POS) Sistemi
 
-Yıldız Market Ticari Otomasyon Sistemi, marketler için geliştirilmiş, Java Swing tabanlı, modern arayüze ve güçlü bir PostgreSQL veritabanı altyapısına sahip profesyonel bir otomasyon ve Kasa (POS) yazılımıdır. 
+Market Ticari Otomasyon Sistemi, marketler için geliştirilmiş, Java Swing tabanlı, modern arayüze ve güçlü bir PostgreSQL veritabanı altyapısına sahip profesyonel bir otomasyon ve Kasa (POS) yazılımıdır. 
 
 Proje; gelişmiş güvenlik özellikleri, hızlı ürün satışı, stok takibi ve otomatik e-posta raporlama gibi modülleriyle uçtan uca bir ticari otomasyon çözümü sunar.
 
