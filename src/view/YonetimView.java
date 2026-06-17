@@ -130,7 +130,9 @@ public class YonetimView extends JFrame {
         gbc.weighty = 1.0;
         pnlForm.add(new JPanel(), gbc);
 
-        modelKampanyalar = new DefaultTableModel(new String[]{"ID", "Ad", "Barkod", "İndirim", "Tür"}, 0);
+        modelKampanyalar = new DefaultTableModel(new String[]{"ID", "Kampanya Başlığı", "Barkod", "İndirim", "Tür", "Başlangıç Tarihi", "Bitiş Tarihi"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
         tableKampanyalar = decorateTable(new JTable(modelKampanyalar));
         
         panel.add(pnlForm, BorderLayout.WEST);
@@ -143,8 +145,12 @@ public class YonetimView extends JFrame {
         p.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         JPanel pnlTables = new JPanel(new GridLayout(1, 2, 10, 10));
-        modelCokSatanlar = new DefaultTableModel(new String[]{"Ürün Adı", "Satış Adedi"}, 0);
-        modelAzKalanlar = new DefaultTableModel(new String[]{"Ürün Adı", "Kalan Stok"}, 0);
+        modelCokSatanlar = new DefaultTableModel(new String[]{"Ürün Adı", "Satış Adedi"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        modelAzKalanlar = new DefaultTableModel(new String[]{"Ürün Adı", "Kalan Stok"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
         tableCokSatanlar = decorateTable(new JTable(modelCokSatanlar));
         tableAzKalanlar = decorateTable(new JTable(modelAzKalanlar));
 
@@ -167,7 +173,9 @@ public class YonetimView extends JFrame {
     private JPanel createSatislarPanel() {
         JPanel p = new JPanel(new BorderLayout(10, 10));
         p.setBorder(new EmptyBorder(10, 10, 10, 10));
-        modelSatislar = new DefaultTableModel(new String[]{"ID", "Tarih", "Tutar", "Ödeme", "Kasiyer", "Müşteri"}, 0);
+        modelSatislar = new DefaultTableModel(new String[]{"ID", "Tarih", "Tutar", "Ödeme", "Kasiyer", "Müşteri"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
         tableSatislar = decorateTable(new JTable(modelSatislar));
         p.add(new JScrollPane(tableSatislar), BorderLayout.CENTER);
         return p;
@@ -175,7 +183,9 @@ public class YonetimView extends JFrame {
 
     private JPanel createPersonelPanel() {
         JPanel p = new JPanel(new BorderLayout(10, 10));
-        modelPersonel = new DefaultTableModel(new String[]{"ID", "Kullanıcı No", "Ad", "Soyad", "Rol"}, 0);
+        modelPersonel = new DefaultTableModel(new String[]{"ID", "Kullanıcı No", "Ad", "Soyad", "Rol"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
         tablePersonel = decorateTable(new JTable(modelPersonel));
         p.add(new JScrollPane(tablePersonel), BorderLayout.CENTER);
         
@@ -189,7 +199,9 @@ public class YonetimView extends JFrame {
     }
 
     private JPanel createLogPanel() {
-        modelLog = new DefaultTableModel(new String[]{"ID", "Kullanıcı", "İşlem", "Tarih"}, 0);
+        modelLog = new DefaultTableModel(new String[]{"ID", "Kullanıcı", "İşlem", "Tarih"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
         tableLog = decorateTable(new JTable(modelLog));
         return new JPanel(new BorderLayout()) {{ add(new JScrollPane(tableLog)); }};
     }

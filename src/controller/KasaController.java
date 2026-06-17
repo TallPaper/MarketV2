@@ -15,6 +15,8 @@ import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.regex.Pattern;
+import java.util.List;
+import java.util.ArrayList;
 
 public class KasaController {
     private KasaView view;
@@ -359,7 +361,30 @@ public class KasaController {
                     fiyat = Math.round(fiyat * 100.0) / 100.0; // Yuvarlama
                 }
                 
-                view.model.addRow(new Object[]{barkod, ad, miktar, rs.getString("birim"), fiyat, miktar * fiyat});
+                // Check if product already exists in the cart (sepet)
+                int existingRow = -1;
+                for (int i = 0; i < view.model.getRowCount(); i++) {
+                    if (view.model.getValueAt(i, 0).toString().equals(barkod)) {
+                        existingRow = i;
+                        break;
+                    }
+                }
+
+                if (existingRow != -1) {
+                    Object existingMiktarObj = view.model.getValueAt(existingRow, 2);
+                    double eskiMiktar = (existingMiktarObj instanceof Number) ? ((Number) existingMiktarObj).doubleValue() : Double.parseDouble(existingMiktarObj.toString());
+                    double yeniMiktar = eskiMiktar + miktar;
+
+                    if (yeniMiktar > mevcutStok) {
+                        JOptionPane.showMessageDialog(view, "Yetersiz Stok! Mevcut: " + mevcutStok);
+                        return;
+                    }
+
+                    view.model.setValueAt(yeniMiktar, existingRow, 2);
+                    view.model.setValueAt(yeniMiktar * fiyat, existingRow, 5);
+                } else {
+                    view.model.addRow(new Object[]{barkod, ad, miktar, rs.getString("birim"), fiyat, miktar * fiyat});
+                }
                 hesaplaGenelToplam();
                 view.txtBarkod.setText(""); view.txtMiktar.setText("1");
                 view.txtBarkod.requestFocus();
@@ -452,33 +477,222 @@ public class KasaController {
         }
 
         try (Connection conn = DatabaseConnection.connect();
-             PreparedStatement ps = conn.prepareStatement("SELECT * FROM satis_detay WHERE satis_id = ? AND iade_edildi = FALSE")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM satis_detay WHERE satis_id = ? ORDER BY id ASC")) {
             ps.setInt(1, islemId);
             ResultSet rs = ps.executeQuery();
             
-            DefaultTableModel iadeModel = new DefaultTableModel(new String[]{"ID", "Barkod", "Ürün", "Miktar", "Toplam"}, 0);
+            DefaultTableModel iadeModel = new DefaultTableModel(
+                new String[]{"ID", "Barkod", "Ürün", "Satın Alınan", "İade Edilen", "Kalan", "Birim Fiyat", "Kalan Tutar", "İade", "Zatenİade"}, 0) {
+                @Override
+                public Class<?> getColumnClass(int columnIndex) {
+                    if (columnIndex == 8) return Boolean.class;
+                    if (columnIndex == 9) return Boolean.class;
+                    return super.getColumnClass(columnIndex);
+                }
+
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    if (column == 8) {
+                        Boolean zatenIade = (Boolean) getValueAt(row, 9);
+                        return zatenIade != null && !zatenIade;
+                    }
+                    return false;
+                }
+            };
+
             while (rs.next()) {
-                iadeModel.addRow(new Object[]{rs.getInt("id"), rs.getString("barkod"), rs.getString("urun_adi"), rs.getDouble("miktar"), rs.getDouble("toplam")});
+                boolean zatenIade = rs.getBoolean("iade_edildi");
+                double miktar = rs.getDouble("miktar");
+                double fiyat = rs.getDouble("fiyat");
+                double iadeMiktari = rs.getDouble("iade_miktari");
+                double kalan = miktar - iadeMiktari;
+                double kalanTutar = kalan * fiyat;
+                
+                if (kalan <= 0) {
+                    zatenIade = true;
+                }
+                
+                String urunAdi = rs.getString("urun_adi");
+                if (zatenIade) {
+                    urunAdi += " (İADE EDİLDİ)";
+                }
+                iadeModel.addRow(new Object[]{
+                    rs.getInt("id"),
+                    rs.getString("barkod"),
+                    urunAdi,
+                    miktar,
+                    iadeMiktari,
+                    kalan,
+                    fiyat,
+                    kalanTutar,
+                    false,
+                    zatenIade
+                });
             }
 
-            if (iadeModel.getRowCount() == 0) { JOptionPane.showMessageDialog(view, "İade edilecek ürün bulunamadı veya zaten iade edilmiş."); return; }
-
-            JTable table = new JTable(iadeModel);
-            int secim = JOptionPane.showConfirmDialog(view, new JScrollPane(table), "İade Edilecek Ürünü Seçin", JOptionPane.OK_CANCEL_OPTION);
-            if (secim == JOptionPane.OK_OPTION && table.getSelectedRow() != -1) {
-                int id = (int) iadeModel.getValueAt(table.getSelectedRow(), 0);
-                String barkod = iadeModel.getValueAt(table.getSelectedRow(), 1).toString();
-                double miktar = (double) iadeModel.getValueAt(table.getSelectedRow(), 3);
-                double tutar = (double) iadeModel.getValueAt(table.getSelectedRow(), 4);
-
-                // Mükerrer İade Engeli (Zaten sorguda engelledik ama garantiye alıyoruz)
-                PreparedStatement psU = conn.prepareStatement("UPDATE satis_detay SET iade_edildi = TRUE WHERE id = ?");
-                psU.setInt(1, id);
-                psU.executeUpdate();
-
-                JOptionPane.showMessageDialog(view, String.format("%.2f TL İade İşlemi Başarılı!", tutar));
+            if (iadeModel.getRowCount() == 0) {
+                JOptionPane.showMessageDialog(view, "Bu numaraya ait bir satış kaydı bulunamadı.");
+                return;
             }
-        } catch (Exception e) { e.printStackTrace(); }
+
+            JTable table = new JTable(iadeModel) {
+                @Override
+                public java.awt.Component prepareRenderer(javax.swing.table.TableCellRenderer renderer, int row, int column) {
+                    java.awt.Component c = super.prepareRenderer(renderer, row, column);
+                    int modelRow = convertRowIndexToModel(row);
+                    Boolean zatenIade = (Boolean) getModel().getValueAt(modelRow, 9);
+                    
+                    if (zatenIade != null && zatenIade) {
+                        c.setForeground(java.awt.Color.GRAY);
+                        c.setBackground(new java.awt.Color(240, 240, 240));
+                        if (c instanceof javax.swing.JCheckBox) {
+                            javax.swing.JCheckBox cb = (javax.swing.JCheckBox) c;
+                            cb.setEnabled(false);
+                        }
+                    } else {
+                        c.setForeground(java.awt.Color.BLACK);
+                        if (isCellSelected(row, column)) {
+                            c.setBackground(getSelectionBackground());
+                        } else {
+                            c.setBackground(java.awt.Color.WHITE);
+                        }
+                        if (c instanceof javax.swing.JCheckBox) {
+                            javax.swing.JCheckBox cb = (javax.swing.JCheckBox) c;
+                            cb.setEnabled(true);
+                        }
+                    }
+                    return c;
+                }
+            };
+
+            // Style Table
+            table.setRowHeight(35);
+            table.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+            table.setSelectionBackground(new Color(220, 230, 240));
+            table.setSelectionForeground(Color.BLACK);
+            table.getTableHeader().setDefaultRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+                @Override
+                public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                    JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                    label.setBackground(new Color(44, 62, 80));
+                    label.setForeground(Color.WHITE);
+                    label.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                    label.setHorizontalAlignment(JLabel.CENTER);
+                    return label;
+                }
+            });
+
+            // Adjust preferred column widths
+            table.getColumnModel().getColumn(0).setPreferredWidth(40);  // ID
+            table.getColumnModel().getColumn(1).setPreferredWidth(90);  // Barkod
+            table.getColumnModel().getColumn(2).setPreferredWidth(160); // Ürün
+            table.getColumnModel().getColumn(3).setPreferredWidth(75);  // Satın Alınan
+            table.getColumnModel().getColumn(4).setPreferredWidth(75);  // İade Edilen
+            table.getColumnModel().getColumn(5).setPreferredWidth(60);  // Kalan
+            table.getColumnModel().getColumn(6).setPreferredWidth(70);  // Birim Fiyat
+            table.getColumnModel().getColumn(7).setPreferredWidth(80);  // Kalan Tutar
+            table.getColumnModel().getColumn(8).setPreferredWidth(50);  // İade
+
+            // Hide the Zatenİade column from view
+            try {
+                table.getColumnModel().removeColumn(table.getColumn("Zatenİade"));
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
+            JScrollPane scrollPane = new JScrollPane(table);
+            scrollPane.setPreferredSize(new Dimension(680, 350));
+
+            Object[] options = {"İade Et", "İptal"};
+            int secim = JOptionPane.showOptionDialog(
+                view,
+                scrollPane,
+                "İade Edilecek Ürünleri Seçin",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+            );
+
+            if (secim == 0) { // User clicked "İade Et"
+                List<IadeItem> iadeEdilecekler = new ArrayList<>();
+                double toplamIadeTutari = 0.0;
+
+                for (int i = 0; i < iadeModel.getRowCount(); i++) {
+                    Boolean checked = (Boolean) iadeModel.getValueAt(i, 8);
+                    Boolean zatenIade = (Boolean) iadeModel.getValueAt(i, 9);
+
+                    if (checked != null && checked && (zatenIade == null || !zatenIade)) {
+                        int id = (Integer) iadeModel.getValueAt(i, 0);
+                        String barkod = iadeModel.getValueAt(i, 1).toString();
+                        String urunAdi = iadeModel.getValueAt(i, 2).toString();
+                        double kalan = (Double) iadeModel.getValueAt(i, 5);
+                        double fiyat = (Double) iadeModel.getValueAt(i, 6);
+
+                        double iadeEdilecekAdet = kalan;
+                        if (kalan > 1.0) {
+                            String cleanName = urunAdi.endsWith(" (İADE EDİLDİ)") ? urunAdi.substring(0, urunAdi.length() - " (İADE EDİLDİ)".length()) : urunAdi;
+                            String input = JOptionPane.showInputDialog(view, 
+                                cleanName + " ürününden " + kalan + " adet iade edilebilir.\nKaç adet iade etmek istiyorsunuz?", 
+                                kalan);
+                            if (input == null || input.trim().isEmpty()) {
+                                return;
+                            }
+                            try {
+                                iadeEdilecekAdet = Double.parseDouble(input.trim().replace(",", "."));
+                                if (iadeEdilecekAdet <= 0 || iadeEdilecekAdet > kalan) {
+                                    JOptionPane.showMessageDialog(view, "Geçersiz miktar girildi!", "Hata", JOptionPane.ERROR_MESSAGE);
+                                    return;
+                                }
+                            } catch (NumberFormatException nfe) {
+                                JOptionPane.showMessageDialog(view, "Geçersiz miktar formatı!", "Hata", JOptionPane.ERROR_MESSAGE);
+                                return;
+                            }
+                        }
+
+                        double toplam = iadeEdilecekAdet * fiyat;
+                        iadeEdilecekler.add(new IadeItem(id, barkod, urunAdi, iadeEdilecekAdet, toplam));
+                        toplamIadeTutari += toplam;
+                    }
+                }
+
+                if (iadeEdilecekler.isEmpty()) {
+                    JOptionPane.showMessageDialog(view, "İade edilmek üzere hiçbir ürün seçilmedi!");
+                    return;
+                }
+
+                // Process database updates inside transaction
+                try (Connection conn2 = DatabaseConnection.connect()) {
+                    conn2.setAutoCommit(false);
+                    try {
+                        for (IadeItem item : iadeEdilecekler) {
+                            try (PreparedStatement psU = conn2.prepareStatement("UPDATE satis_detay SET iade_miktari = iade_miktari + ? WHERE id = ?")) {
+                                psU.setDouble(1, item.miktar);
+                                psU.setInt(2, item.id);
+                                psU.executeUpdate();
+                            }
+                        }
+                        conn2.commit();
+                        
+                        JOptionPane.showMessageDialog(view, String.format("Seçilen ürünlerin iade işlemi başarıyla tamamlandı!\nToplam İade Tutarı: %.2f TL", toplamIadeTutari));
+                        
+                        // Print refund receipt
+                        iadeFisiGoster(islemId, iadeEdilecekler, toplamIadeTutari);
+                        
+                    } catch (Exception ex) {
+                        conn2.rollback();
+                        throw ex;
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(view, "İade işlemi sırasında hata oluştu: " + ex.getMessage(), "Hata", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(view, "Bir veritabanı hatası oluştu: " + e.getMessage(), "Hata", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void fisGoster(String tur, double alinan, double paraUstu, int id) {
@@ -522,4 +736,47 @@ public class KasaController {
     }
 
     private void miktarGuncelle() { /* Opsiyonel miktar güncelleme */ }
+
+    private void iadeFisiGoster(int satisId, List<IadeItem> items, double toplamIade) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("      YILDIZ MARKET İADE FİŞİ      \n");
+        sb.append("===================================\n");
+        sb.append("Tarih: ").append(new SimpleDateFormat("dd.MM.yyyy HH:mm").format(new Date())).append("\n");
+        sb.append("İade Edilen Fiş No: ").append(satisId).append("\n");
+        sb.append("Kasiyer: ").append(aktifPersonel.getAdSoyad()).append("\n");
+        sb.append("-----------------------------------\n");
+        sb.append(String.format("%-18s %6s %10s\n", "ÜRÜN", "ADET", "TUTAR"));
+        for (IadeItem item : items) {
+            String ad = item.urunAdi;
+            if (ad.endsWith(" (İADE EDİLDİ)")) {
+                ad = ad.substring(0, ad.length() - " (İADE EDİLDİ)".length());
+            }
+            sb.append(String.format("%-18s %6.1f %10.2f\n", ad, item.miktar, item.toplam));
+        }
+        sb.append("===================================\n");
+        sb.append(String.format("TOPLAM İADE TUTARI: %14.2f TL\n", toplamIade));
+        sb.append("===================================\n");
+        sb.append("      İADE İŞLEMİ TAMAMLANMIŞTIR   \n");
+
+        JTextArea area = new JTextArea(sb.toString());
+        area.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        area.setEditable(false);
+        JOptionPane.showMessageDialog(view, new JScrollPane(area), "İade Fiş Çıktısı", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private static class IadeItem {
+        int id;
+        String barkod;
+        String urunAdi;
+        double miktar;
+        double toplam;
+        
+        IadeItem(int id, String barkod, String urunAdi, double miktar, double toplam) {
+            this.id = id;
+            this.barkod = barkod;
+            this.urunAdi = urunAdi;
+            this.miktar = miktar;
+            this.toplam = toplam;
+        }
+    }
 }

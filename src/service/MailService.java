@@ -71,4 +71,26 @@ public class MailService {
             return false;
         }
     }
+
+    public static void kampanyaBitisDuyurusuGonder(String kampanyaBaslik, List<Musteri> musteriler) {
+        new Thread(() -> {
+            System.out.println("--- Kampanya Bitiş Duyuru Sistemi Başlatıldı ---");
+            int basarili = 0;
+            int hatali = 0;
+
+            for (Musteri m : musteriler) {
+                if (m.getMail() != null && m.getMail().contains("@")) {
+                    boolean sonuc = sendEmail(m.getMail(), "Kampanya Sona Erdi: " + kampanyaBaslik, 
+                        "Sayın " + m.getAdSoyad() + ",\n\n" + 
+                        "Yıldız Market'teki '" + kampanyaBaslik + "' kampanyamız sona ermiştir.\n" +
+                        "Yeni kampanyalarımızdan haberdar olmak için bizi takip etmeye devam edin!\n\nİyi günler dileriz.");
+                    
+                    if (sonuc) basarili++; else hatali++;
+                    
+                    try { Thread.sleep(1000); } catch (InterruptedException e) {} // Rate limit protection
+                }
+            }
+            System.out.println("--- Bitiş Duyurusu Tamamlandı | Başarılı: " + basarili + " | Hatalı: " + hatali + " ---");
+        }).start();
+    }
 }

@@ -209,18 +209,82 @@ public class YonetimController {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    private void sureciBitenKampanyalariTemizle() {
+        try (Connection conn = DatabaseConnection.connect()) {
+            List<String> silinenKampanyalar = new ArrayList<>();
+            List<Integer> silinecekIds = new ArrayList<>();
+            
+            try (Statement s = conn.createStatement();
+                 ResultSet rs = s.executeQuery("SELECT id, kampanya_baslik FROM kampanyalar WHERE bitis_tarihi < CURRENT_DATE")) {
+                while (rs.next()) {
+                    silinecekIds.add(rs.getInt("id"));
+                    silinenKampanyalar.add(rs.getString("kampanya_baslik"));
+                }
+            }
+
+            if (!silinecekIds.isEmpty()) {
+                List<Musteri> musteriler = new ArrayList<>();
+                try (Statement s = conn.createStatement();
+                     ResultSet rs = s.executeQuery("SELECT * FROM musteriler")) {
+                    while (rs.next()) {
+                        musteriler.add(new Musteri(
+                            rs.getInt("id"),
+                            rs.getString("telefon"),
+                            rs.getString("ad_soyad"),
+                            rs.getString("mail"),
+                            rs.getDouble("puan")
+                        ));
+                    }
+                }
+
+                for (String baslik : silinenKampanyalar) {
+                    MailService.kampanyaBitisDuyurusuGonder(baslik, musteriler);
+                }
+
+                conn.setAutoCommit(false);
+                try {
+                    for (int id : silinecekIds) {
+                        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM kampanyalar WHERE id = ?")) {
+                            ps.setInt(1, id);
+                            ps.executeUpdate();
+                        }
+                    }
+                    conn.commit();
+                } catch (Exception ex) {
+                    conn.rollback();
+                    throw ex;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void loadKampanyalar() {
+        sureciBitenKampanyalariTemizle();
         view.modelKampanyalar.setRowCount(0);
-        try (Connection c = DatabaseConnection.connect(); ResultSet rs = c.createStatement().executeQuery("SELECT * FROM kampanyalar")) {
-            while (rs.next()) view.modelKampanyalar.addRow(new Object[]{rs.getInt("id"), "Kampanya", rs.getString("urun_barkod"), "%" + rs.getInt("indirim_yuzdesi"), rs.getString("kampanya_adi")});
-        } catch (Exception e) {}
+        try (Connection c = DatabaseConnection.connect(); ResultSet rs = c.createStatement().executeQuery("SELECT * FROM kampanyalar ORDER BY id ASC")) {
+            while (rs.next()) {
+                view.modelKampanyalar.addRow(new Object[]{
+                    rs.getInt("id"),
+                    rs.getString("kampanya_baslik"),
+                    rs.getString("urun_barkod"),
+                    "%" + rs.getInt("indirim_yuzdesi"),
+                    rs.getString("kampanya_adi"),
+                    rs.getDate("baslangic_tarihi"),
+                    rs.getDate("bitis_tarihi")
+                });
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void loadAnalizVerileri() {
         view.modelCokSatanlar.setRowCount(0);
         view.modelAzKalanlar.setRowCount(0);
         try (Connection c = DatabaseConnection.connect()) {
-            try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT urun_adi, satis_sayisi FROM urunler ORDER BY satis_sayisi DESC LIMIT 5")) {
+            try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT urun_adi, satis_sayisi FROM urunler ORDER BY satis_sayisi DESC LIMIT 15")) {
                 while (rs.next()) view.modelCokSatanlar.addRow(new Object[]{rs.getString(1), rs.getInt(2)});
             }
             try (PreparedStatement ps = c.prepareStatement("SELECT * FROM fn_kritik_stok(CAST(? AS numeric))")) {
@@ -272,13 +336,15 @@ public class YonetimController {
     private void personelDuzenle() {
         int row = view.tablePersonel.getSelectedRow();
         if (row == -1) { JOptionPane.showMessageDialog(view, "Düzenlenecek personeli seçin!"); return; }
-        int id = (int) view.modelPersonel.getValueAt(row, 0);
+        int modelRow = view.tablePersonel.convertRowIndexToModel(row);
+        Object idObj = view.modelPersonel.getValueAt(modelRow, 0);
+        int id = (idObj instanceof Number) ? ((Number) idObj).intValue() : Integer.parseInt(idObj.toString());
         
-        JTextField t1 = new JTextField(view.modelPersonel.getValueAt(row, 1).toString());
-        JTextField t2 = new JTextField(view.modelPersonel.getValueAt(row, 2).toString());
-        JTextField t3 = new JTextField(view.modelPersonel.getValueAt(row, 3).toString());
+        JTextField t1 = new JTextField(view.modelPersonel.getValueAt(modelRow, 1).toString());
+        JTextField t2 = new JTextField(view.modelPersonel.getValueAt(modelRow, 2).toString());
+        JTextField t3 = new JTextField(view.modelPersonel.getValueAt(modelRow, 3).toString());
         JComboBox<String> c = new JComboBox<>(new String[]{"KASA", "DEPO", "YONETIM"});
-        c.setSelectedItem(view.modelPersonel.getValueAt(row, 4).toString());
+        c.setSelectedItem(view.modelPersonel.getValueAt(modelRow, 4).toString());
         
         if (JOptionPane.showConfirmDialog(view, new Object[]{"Kullanıcı No:", t1, "Ad:", t2, "Soyad:", t3, "Rol:", c}, "Personel Düzenle", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
             try (Connection x = DatabaseConnection.connect(); PreparedStatement p = x.prepareStatement("UPDATE personel SET kullanici_no=?, ad=?, soyad=?, rol=? WHERE id=?")) {
@@ -292,7 +358,10 @@ public class YonetimController {
         int r = tbl.getSelectedRow();
         if (r != -1 && JOptionPane.showConfirmDialog(view, "Kaydı silmek istediğinize emin misiniz?", "Sil", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
             try (Connection c = DatabaseConnection.connect(); PreparedStatement p = c.prepareStatement("DELETE FROM " + tablo + " WHERE id = ?")) {
-                p.setInt(1, (int) tbl.getValueAt(r, 0));
+                int modelRow = tbl.convertRowIndexToModel(r);
+                Object idObj = tbl.getValueAt(modelRow, 0);
+                int id = (idObj instanceof Number) ? ((Number) idObj).intValue() : Integer.parseInt(idObj.toString());
+                p.setInt(1, id);
                 p.executeUpdate(); verileriYukle();
             } catch (Exception e) { e.printStackTrace(); }
         }

@@ -1,4 +1,4 @@
-﻿-- Yildiz Market Modernizasyon SQL Guncelleme Scripti
+-- Yildiz Market Modernizasyon SQL Guncelleme Scripti
 
 -- 1. Musteri Sadakat Sistemi Icin Musteri Tablosu
 CREATE TABLE IF NOT EXISTS musteriler (
@@ -48,3 +48,24 @@ BEGIN
         ALTER TABLE kampanyalar ADD COLUMN kampanya_baslik VARCHAR(150);
     END IF;
 END $$;
+
+-- 7. Satis Detay Tablosuna Kismi Iade Miktari Sutunu ve Guncellenmis Stok Tetikleyicisi
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='satis_detay' AND column_name='iade_miktari') THEN
+        ALTER TABLE satis_detay ADD COLUMN iade_miktari DECIMAL(10,2) DEFAULT 0;
+    END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION fn_trg_iade_stok_ekle()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.iade_miktari <> OLD.iade_miktari THEN
+        UPDATE urunler SET stok = stok + (NEW.iade_miktari - OLD.iade_miktari) WHERE barkod = NEW.barkod;
+    END IF;
+    IF NEW.iade_miktari >= NEW.miktar THEN
+        NEW.iade_edildi := TRUE;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;

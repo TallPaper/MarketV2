@@ -45,6 +45,23 @@ public class DatabaseConnection {
                     System.out.println("Veritabanı kurulumu başarıyla tamamlandı.");
                 }
             }
+
+            // Apply migrations for partial refunds
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("ALTER TABLE satis_detay ADD COLUMN IF NOT EXISTS iade_miktari DECIMAL(10,2) DEFAULT 0;");
+                stmt.execute("CREATE OR REPLACE FUNCTION fn_trg_iade_stok_ekle()\n" +
+                             "RETURNS TRIGGER AS $$\n" +
+                             "BEGIN\n" +
+                             "    IF NEW.iade_miktari <> OLD.iade_miktari THEN\n" +
+                             "        UPDATE urunler SET stok = stok + (NEW.iade_miktari - OLD.iade_miktari) WHERE barkod = NEW.barkod;\n" +
+                             "    END IF;\n" +
+                             "    IF NEW.iade_miktari >= NEW.miktar THEN\n" +
+                             "        NEW.iade_edildi := TRUE;\n" +
+                             "    END IF;\n" +
+                             "    RETURN NEW;\n" +
+                             "END;\n" +
+                             "$$ LANGUAGE plpgsql;");
+            }
         } catch (Exception e) {
             System.err.println("Veritabanı ilklendirme hatası: " + e.getMessage());
         }

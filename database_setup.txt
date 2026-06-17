@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS satis_detay (
     miktar DECIMAL(10,2),
     fiyat DECIMAL(10,2),
     toplam DECIMAL(10,2),
-    iade_edildi BOOLEAN DEFAULT FALSE
+    iade_edildi BOOLEAN DEFAULT FALSE,
+    iade_miktari DECIMAL(10,2) DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS kampanyalar (
@@ -114,8 +115,11 @@ FOR EACH ROW EXECUTE FUNCTION fn_trg_stok_dus();
 CREATE OR REPLACE FUNCTION fn_trg_iade_stok_ekle()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.iade_edildi = TRUE AND OLD.iade_edildi = FALSE THEN
-        UPDATE urunler SET stok = stok + NEW.miktar WHERE barkod = NEW.barkod;
+    IF NEW.iade_miktari <> OLD.iade_miktari THEN
+        UPDATE urunler SET stok = stok + (NEW.iade_miktari - OLD.iade_miktari) WHERE barkod = NEW.barkod;
+    END IF;
+    IF NEW.iade_miktari >= NEW.miktar THEN
+        NEW.iade_edildi := TRUE;
     END IF;
     RETURN NEW;
 END;
