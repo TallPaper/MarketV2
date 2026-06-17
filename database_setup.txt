@@ -163,13 +163,13 @@ INSERT INTO personel (kullanici_no, ad, soyad, rol, sifre, mail) VALUES
 ('201', 'Ayse', 'Demir', 'KASA', '1234', 'ayse@yildizmarket.com');
 
 SELECT fn_urun_kaydet('8690504001', 'Ekmek', 'Gida', 100, 'Adet', 8, 10);
-SELECT fn_urun_kaydet('8690504002', 'Sut', 'Sut Urunleri', 50, 'Adet', 25, 35);
+SELECT fn_urun_kaydet('8690504002', 'Süt', 'Sut Urunleri', 50, 'Adet', 25, 35);
 SELECT fn_urun_kaydet('8690504003', 'Su 0.5L', 'Icecek', 500, 'Adet', 2, 5);
 SELECT fn_urun_kaydet('8690504004', 'Domates', 'Manav', 50, 'Kg', 15, 25);
 SELECT fn_urun_kaydet('8690504005', 'Elma', 'Manav', 40, 'Kg', 12, 20);
 SELECT fn_urun_kaydet('8690504006', 'Yumurta', 'Gida', 300, 'Adet', 2, 4);
 SELECT fn_urun_kaydet('8690504007', 'Gazete', 'Diger', 20, 'Adet', 5, 10);
-SELECT fn_urun_kaydet('8690504008', 'Poset', 'Diger', 1000, 'Adet', 0.10, 0.25);
+SELECT fn_urun_kaydet('8690504008', 'Poşet', 'Diger', 1000, 'Adet', 0.10, 0.25);
 
 INSERT INTO musteriler (telefon, ad_soyad, mail, puan) VALUES 
 ('5551112233', 'Test Musteri', 'test@mail.com', 50.00);
