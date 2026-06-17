@@ -10,7 +10,12 @@ Proje; gelişmiş güvenlik özellikleri, hızlı ürün satışı, stok takibi 
 
 *   **🔒 Gelişmiş Giriş ve Güvenlik Sistemi:** Rol tabanlı erişim kontrolü (Yönetici / Kasa Görevlisi) ve güvenli giriş paneli.
 *   **💻 Modern Kasa (POS) Arayüzü:** Hızlı ürün butonları ("Hızlı Ürünler") ile veritabanından dinamik barkod sorgulama ve anında sepete ekleme.
+*   **🛒 Sepette Ürün Birleştirme:** Sepete aynı ürün eklendiğinde ayrı satır oluşturmak yerine mevcut satırdaki miktar ve toplam tutar güncellenir.
 *   **📦 Stok ve Envanter Yönetimi:** Kritik stok seviyesi kontrolü, otomatik stok düşümü ve ürün ekleme/güncelleme işlemleri.
+*   **🔄 Gelişmiş ve Kısmi İade Sistemi:** İade ekranında ürünler onay kutuları (checkbox) ile çoklu seçilebilir. Ürün miktarı 1'den fazla ise iade edilecek miktar sorulur, kısmi iadeler takip edilir ve kalan miktarlar daha sonra iade edilebilir. İade edilen miktar anında ürün stoğuna geri eklenir. Zaten iade edilmiş ürünler satır bazında grileştirilerek engellenir.
+*   **🧾 Termal İade Fişi:** Tamamlanan iade işleminin ardından iade edilen ürünleri, miktarları, birim ve toplam tutarları gösteren termal fiş çıktısı ekrana yansıtılır.
+*   **📅 Kampanya Zaman Yönetimi:** Kampanyaların başlangıç ve bitiş tarihleri yönetim panelindeki tabloda listelenir.
+*   **🧹 Otomatik Kampanya Temizliği & Bitiş Bildirimi:** Süresi dolan kampanyalar panel açılışında veritabanından otomatik olarak temizlenir ve üyelerin e-posta adreslerine kampanyanın sona erdiğine dair bilgilendirme maili gönderilir.
 *   **📊 Veritabanı Düzeyinde İş Mantığı:** PostgreSQL üzerinde çalışan stored function'lar, trigger'lar, otomatik loglama ve audit trail yapıları sayesinde yüksek veri tutarlılığı.
 *   **📧 Otomatik E-Posta Servisi:** Günlük satış özetleri ve kritik seviyedeki stok uyarılarını otomatik olarak yöneticiye e-posta yoluyla raporlayan entegre JavaMail entegrasyonu.
 *   **🎨 Premium Arayüz:** Kullanıcı dostu, modern sistem temasıyla uyumlu ve dinamik Swing arayüzü.
